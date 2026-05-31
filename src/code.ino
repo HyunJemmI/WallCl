@@ -1,153 +1,107 @@
 #include <Wire.h>
-#include <Adafruit_PWMServoDriver.h>//https://m.blog.naver.com/aul-_-/221793940620 여기 나온대로 라이브러리 다운 받기
+#include <Adafruit_PWMServoDriver.h>
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
-int mag0 = 3;
-int mag1 = 4;
-int mag2 = 5;
-int a=0;
+const int MAGNET_PINS[] = {3, 4, 5};
+const int MAGNET_COUNT = sizeof(MAGNET_PINS) / sizeof(MAGNET_PINS[0]);
 
-void setup() 
-{
-  Serial.begin(9600);//테스트 용 시리얼 통신
-  pwm.begin();  
-  pwm.setPWMFreq(50);//작동 잘 안되면 50에서부터 다른 수 넣기-frequency
-  pinMode(mag0, OUTPUT);
-  pinMode(mag1, OUTPUT);
-  pinMode(mag2, OUTPUT);
+const int PWM_FREQUENCY_HZ = 50;
+const int PWM_MIN = 150;
+const int PWM_MAX = 600;
+const int SERVO_RESET_LOW = 225;
+const int SERVO_RESET_HIGH = 525;
+
+const int STEP_DELAY_MS = 10;
+const int MOTION_SETTLE_DELAY_MS = 5000;
+
+const char COMMAND_FORWARD = '0';
+const char COMMAND_LEFT = '1';
+const char COMMAND_RIGHT = '2';
+
+struct MotionStep {
+  double startA;
+  double startB;
+  double endA;
+  double endB;
+  double stepA;
+  double stepB;
+};
+
+const MotionStep MOTION_STEPS[] = {
+  {30.0, 150.0, 9.155, 108.31, -0.1, -0.2},
+  {9.155, 108.31, 108.31, 9.155, 0.1, -0.1},
+  {108.31, 9.155, 150.0, 30.0, 0.2, 0.1},
+};
+
+void setup() {
+  Serial.begin(9600);
+  pwm.begin();
+  pwm.setPWMFreq(PWM_FREQUENCY_HZ);
+
+  for (int i = 0; i < MAGNET_COUNT; i++) {
+    pinMode(MAGNET_PINS[i], OUTPUT);
+  }
 }
 
-void loop() 
-{
-  digitalWrite(3,HIGH); //전자석
-  digitalWrite(4,HIGH);
-  digitalWrite(5,HIGH);
-  a = Serial.read();
-  if(a== '0')//전진
-  {
-    Serial.print(a);
-    act(0,1);//여기있는 숫자는 모듈에 꽂은 핀 번호 기준으로 한 모터 구분  
+void loop() {
+  enableAllMagnets();
+
+  if (!Serial.available()) {
+    return;
   }
-  else if(a=='1')//왼쪽
-  {
-    Serial.print(a);
-    act(2,0);
-  }
-  else if(a=='2')//오른쪽
-  {
-    Serial.print(a);
-    act(1,2);
+
+  char command = Serial.read();
+  if (command == COMMAND_FORWARD) {
+    Serial.print(command);
+    act(0, 1);
+  } else if (command == COMMAND_LEFT) {
+    Serial.print(command);
+    act(2, 0);
+  } else if (command == COMMAND_RIGHT) {
+    Serial.print(command);
+    act(1, 2);
   }
 }
 
+void enableAllMagnets() {
+  for (int i = 0; i < MAGNET_COUNT; i++) {
+    digitalWrite(MAGNET_PINS[i], HIGH);
+  }
+}
 
-void act(int num1, int num2)//움직이기
-{
-  //if문 1
-//  if(num1==0) //num1 = 0, num2 = 1
-//  {
-//    digitalWrite(mag0,HIGH);
-//    digitalWrite(mag1,HIGH);
-//    digitalWrite(mag2,LOW);
-//  }
-//  
-//  else if(num1==1) //num1 = 1, num2 = 2
-//  {
-//    digitalWrite(mag0,LOW);
-//    digitalWrite(mag1,HIGH);
-//    digitalWrite(mag2,HIGH);
-//  }
-//  else if(num1==2) //num1 = 2, num2 = 0
-//  {
-//    digitalWrite(mag0,HIGH);
-//    digitalWrite(mag1,LOW);
-//    digitalWrite(mag2,HIGH);
-//  }
-//  delay(3000);
-  
-  for(double a=30,b=150;a>=9.155,b>=108.31; a-=0.1,b-=0.2)//실수형 변수(다시 계산 : 41.69 / 20.845) / 기존 값 42.24 / 141.12
-  {
-    double rx = constrain(map(a,0,180,150,600),150,600); //입력받은 x값을 매핑(0~180도를 150~600으로 확장, constrain으로 범위를 한정(0보다 작은 수를 150보다 작은 수로 변환하지 않게)
-    double ry = constrain(map(b,0,180,150,600),150,600);
-    pwm.setPWM(num1,0,rx); //pca9685의 (num1)번 핀-->여기 괄호 속 첫번째는 핀번호, 두번째는 무조건 0으로, 마지막은 변환된 각도
-    pwm.setPWM(num2,0,ry); //pca9685의 (num2)번 핀
-    
-//    Serial.print(rx);//요거는 각도 제대로 입력하는지 시리얼 모니터로 테스트 할 수 있는 코드
-//    Serial.print('\n');
-    
-    delay(10);
+void act(int servoA, int servoB) {
+  for (int i = 0; i < 3; i++) {
+    moveServoPair(servoA, servoB, MOTION_STEPS[i]);
   }
-  
-  for(double a=9.155,b=108.31;a<=108.31,b>=9.155;a+=0.1,b-=0.1)
-  {
-    double rx = constrain(map(a,0,180,150,600),150,600); 
-    double ry = constrain(map(b,0,180,150,600),150,600);
-    pwm.setPWM(num1,0,rx); 
-    pwm.setPWM(num2,0,ry); 
-    
-//    Serial.print(rx);
-//    Serial.print('\n');
-    
-    delay(10);
-   
-  }
-  for(double a=108.31,b=9.155;a<=150,b<=30;a+=0.2,b+=0.1)
-  {
-    double rx = constrain(map(a,0,180,150,600),150,600); 
-    double ry = constrain(map(b,0,180,150,600),150,600);
-    pwm.setPWM(num1,0,rx); 
-    pwm.setPWM(num2,0,ry); 
 
-//    Serial.print(rx);
-//    Serial.print('\n');
-    
-    delay(10);
-   
+  pwm.setPWM(servoA, 0, SERVO_RESET_LOW);
+  pwm.setPWM(servoB, 0, SERVO_RESET_HIGH);
+  delay(MOTION_SETTLE_DELAY_MS);
+}
+
+void moveServoPair(int servoA, int servoB, MotionStep step) {
+  double angleA = step.startA;
+  double angleB = step.startB;
+
+  while (isWithinRange(angleA, step.endA, step.stepA) &&
+         isWithinRange(angleB, step.endB, step.stepB)) {
+    pwm.setPWM(servoA, 0, angleToPulse(angleA));
+    pwm.setPWM(servoB, 0, angleToPulse(angleB));
+
+    angleA += step.stepA;
+    angleB += step.stepB;
+    delay(STEP_DELAY_MS);
   }
-  //if 2
-//  if(num1==0) //num1 = 0, num2 = 1
-//  {
-//    digitalWrite(mag0,LOW);
-//    digitalWrite(mag1,HIGH);
-//    digitalWrite(mag2,HIGH);
-//  }
-//  else if(num1==1)//num1 = 1, num2 = 2
-//  {
-//    digitalWrite(mag0,HIGH);
-//    digitalWrite(mag1,LOW);
-//    digitalWrite(mag2,HIGH);
-//  }
-//  else if(num1==2)//num1 = 2, num2 = 0
-//  {
-//    digitalWrite(mag0,HIGH);
-//    digitalWrite(mag1,HIGH);
-//    digitalWrite(mag2,LOW);
-//  }
-//  delay(3000);
-  pwm.setPWM(num1,0,225);//다시 초기 상태로 조절(120도)
-  
-  //if 3
-//  if(num1==0)//num1 = 0, num2 = 1
-//  {
-//    digitalWrite(mag0,HIGH);
-//    digitalWrite(mag1,LOW);
-//    digitalWrite(mag2,HIGH);
-//  }
-//  else if(num1==1)// num1 = 1, num2 = 2
-//  {
-//    digitalWrite(mag0,HIGH);
-//    digitalWrite(mag1,HIGH);
-//    digitalWrite(mag2,LOW);
-//  }
-//  else if(num1==2)//num1 = 2, num2 = 0
-//  {
-//    digitalWrite(mag0,LOW);
-//    digitalWrite(mag1,HIGH);
-//    digitalWrite(mag2,HIGH);
-//  }
-//  delay(3000);
-  pwm.setPWM(num2,0,525);//다시 초기 상태로 조절(0도)
-  
-  delay(5000);//제대로 작동하는지 확인하기 위해 딜레이 길게 설정
+}
+
+bool isWithinRange(double value, double endValue, double stepValue) {
+  if (stepValue > 0) {
+    return value <= endValue;
+  }
+  return value >= endValue;
+}
+
+int angleToPulse(double angle) {
+  return constrain(map(angle, 0, 180, PWM_MIN, PWM_MAX), PWM_MIN, PWM_MAX);
 }
